@@ -1,0 +1,170 @@
+ /*-------------------------------------------------------------------*/
+ /*       Programs for Subsetting LODES Data		                      */
+ /* Program aggregates block data into higher GEOLevel data        	  */
+ /*          by Nathanael Proctor Rosenheim				                    */
+ /*-------------------------------------------------------------------*/
+ /*                                                                   */
+ /* This material is provided "as is" by the author.                  */
+ /* There are no warranties, expressed or implied, as to              */
+ /* merchantability or fitness for a particular purpose regarding     */
+ /* the materials or code contained herein. The author is not         */
+ /* responsible for errors in this material as it now exists or       */
+ /* will exist, nor does the author provide technical support for it. */
+ /*                                                                   */
+ /*-------------------------------------------------------------------*/
+ /* Date Last Updated: 9 June 2014                                    */
+ /*-------------------------------------------------------------------*/
+ /* Questions or problem reports concerning this material may be      */
+ /* addressed to the author on github: https://github.com/npr99       */
+ /*                                                                   */
+ /*-------------------------------------------------------------------*/
+ /* Data Source:                                                      */
+ /* United States Census Bureau (2013) LEHD Origin-Destination        */ 
+ /*       Employment Statistics (LODES)Dataset Structure Format       */
+ /*       Version 7.0 Retrieved 5/22/2013 from                        */
+ /*       http://lehd.ces.census.gov/data/                            */
+ /*-------------------------------------------------------------------*/
+
+/*-------------------------------------------------------------------*/
+/* Codes for Key Variables in LODES OD Files                         */
+/*-------------------------------------------------------------------*/
+
+	/* GEOLevel: Level of Geography;
+	* State, County, CensusTract, BlockGroup */
+	/* Job Type
+	JT00 = All Jobs
+	JT01 = Primary Jobs
+	JT02 = All Private Jobs
+	JT03 = Private Primary Jobs
+	JT04 = All Federal Jobs (not all years)
+	JT05 = Federal Primary Jobs (not all years)*/
+	/* ODType;
+    Aux = jobs with the workplace in the state and 
+	the residence outside of the state;
+	Main = jobs with both workplace and residence in the state */
+
+
+/*-------------------------------------------------------------------*/
+/* Import LODES OD File                                              */
+/*-------------------------------------------------------------------*/
+
+%MACRO ImportLODES(
+   State = ,
+   Year = ,
+   GEOLevel = ,
+   JobType =  ,
+   ODType =);
+
+* Macro Variable for the LODES File that will be imported;
+%let file1= &dd_data.onthemap\LODES7\&state.\od\&state._od_&ODType._&JobType._&year..csv.gz;
+
+
+*  The following line should contain the directory
+  	where the gzip is to be stored  
+	use " " around directories with spaces;
+
+%LET dd_gzip = C:\"Program Files (x86)"\GnuWin32\bin\gzip;
+
+* Use a trailing @, then keep specific Census Blocks;
+* Using INFILE to read in Comma-seperated value files, first obseravtion has headers therefore will be skipped (FIRSTOBS = 2)
+Going to use Delimiter-Senstive DATA option (DSD) just in case missing values exist;
+
+* Generate output OD file for select counties;
+
+DATA work.&state.od_&ODType._&JobType._&year REPLACE;
+	filename datafile pipe %unquote(%str(%'&dd_gzip -cd &file1%')) LRECL = 80;
+	* Double check the longest line width of 80 should be long enough hence LRECL = 80;
+	INFILE datafile DLM = ',' FIRSTOBS = 2 DSD;
+	INPUT 
+		w_statefp $2. @1
+		w_countyfp $5. @1
+		w_censustractfp $11. @1
+		w_blockid $15. +1
+		h_statefp $2. @17 
+		h_countyfp $5. @17
+		h_censustractfp $11. @17
+		h_blockid $15. +1 
+		S000 
+		SA01 
+		SA02 
+		SA03 
+		SE01 
+		SE02 
+		SE03 
+		SI01 
+		SI02 
+		SI03 
+		createdate;
+RUN;
+
+* Sort data by home GEOLevel and then by work GEOLevel
+sets data up for grouping by home GEOLevel then by work GEOLevel;
+PROC SORT DATA = work.&state.od_&ODType._&JobType._&year OUT = work.&state.od_&ODType._&JobType._&year;
+	BY h_&geolevel.fp w_&geolevel.fp;
+RUN;
+%MEND ImportLODES;
+
+/*-------------------------------------------------------------------*/
+/* Aggregate LODES OD File                                           */
+/*-------------------------------------------------------------------*/
+
+%MACRO AggregateLODES(
+   State = ,
+   Year = ,
+   GEOLevel = ,
+   JobType =  ,
+   ODType =);
+
+* Generate a table that sums GEOLevel-to-GEOLevel data;
+DATA work.SUM&state.&geolevel.&ODType REPLACE;
+	Set work.&state.od_&ODType._&JobType._&year;
+	BY h_&geolevel.fp w_&geolevel.fp;
+	IF first.w_&geolevel.fp THEN DO;
+		sum_S000 = 0; 
+		sum_SA01 = 0; 
+		sum_SA02 = 0; 
+		sum_SA03 = 0; 
+		sum_SE01 = 0; 
+		sum_SE02 = 0; 
+		sum_SE03 = 0; 
+		sum_SI01 = 0; 
+		sum_SI02 = 0; 
+		sum_SI03 = 0;
+		cnt = 0;
+		END;
+	sum_S000 + S000; 
+	sum_SA01 + SA01; 
+	sum_SA02 + SA02; 
+	sum_SA03 + SA03; 
+	sum_SE01 + SE01; 
+	sum_SE02 + SE02; 
+	sum_SE03 + SE03; 
+	sum_SI01 + SI01; 
+	sum_SI02 + SI02; 
+	sum_SI03 + SI03;
+	cnt + 1; 
+	IF last.w_&geolevel.fp THEN OUTPUT;
+RUN;
+* Drop variables that are nolonger needed;
+DATA work.SUM&state.&geolevel.&ODType REPLACE;
+	Set work.SUM&state.&geolevel.&ODType;
+	KEEP
+		h_statefp
+		h_&geolevel.fp
+		w_statefp
+		w_&geolevel.fp
+		sum_S000 
+		sum_SA01 
+		sum_SA02 
+		sum_SA03
+		sum_SE01
+		sum_SE02
+		sum_SE03
+		sum_SI01
+		sum_SI02 
+		sum_SI03
+		cnt;
+RUN;
+%MEND AggregateLODES;
+
+
