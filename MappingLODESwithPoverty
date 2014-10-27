@@ -1,0 +1,325 @@
+/*-------------------------------------------------------------------*/
+/* Program takes LODES7 data and add ACS Census Tract Poverty Data   */
+/* Then the program Creates a file to load in QGIS to map            */
+/*          by Nathanael Proctor Rosenheim                           */
+/*-------------------------------------------------------------------*/
+/*                                                                   */
+/* This material is provided "as is" by the author.                  */
+/* There are no warranties, expressed or implied, as to              */
+/* merchantability or fitness for a particular purpose regarding     */
+/* the materials or code contained herein. The author is not         */
+/* responsible for errors in this material as it now exists or       */
+/* will exist, nor does the author provide technical support for it. */
+/*                                                                   */
+/*-------------------------------------------------------------------*/
+/* Date Last Updated: 26 Oct 2014                                    */
+/*-------------------------------------------------------------------*/
+/* Questions or problem reports concerning this material may be      */
+/* addressed to the author on github: https://github.com/npr99       */
+/*                                                                   */
+/*-------------------------------------------------------------------*/
+/* Data Source:                                                      */
+/* United States Census Bureau (2013) LEHD Origin-Destination        */ 
+/*       Employment Statistics (LODES)Dataset Structure Format       */
+/*       Version 7.0 Retrieved 5/22/2013 from                        */
+/*       http://lehd.ces.census.gov/data/                            */
+/* Data Source:                                                      */
+/* United States Census Bureau (2013) ACS 2010 5 year                */ 
+/*-------------------------------------------------------------------*/
+/*-------------------------------------------------------------------*/
+/* Clear Log                                                         */
+/*-------------------------------------------------------------------*/
+DM "clear log";
+
+/*-------------------------------------------------------------------*/
+/* Control Symbolgen                                                 */
+/*-------------------------------------------------------------------*/
+
+* Turn on SYBMBOLGEN option to see how macro variables are resolved in log;
+* global system option MPRINT to view the macro code with the 
+macro variables resolved;
+* options SYMBOLGEN MPRINT;
+
+* SYMBOLGEN option can be turned off with the following command;
+options nosymbolgen;
+
+/*-------------------------------------------------------------------*/
+/* Important Folder Locations                                        */
+/*-------------------------------------------------------------------*/
+
+%LET dd_data = C:\...\MyData\;
+%LET dd_SASLib = C:\...\MySASLib\;
+%LET Include_prog = C:\...\MyPrograms\;
+
+/*-------------------------------------------------------------------*/
+/* Important Macro Variables                                         */
+/*-------------------------------------------------------------------*/
+
+* Set Macro Variables for State and Years;
+%LET State = TX;
+%LET Statefp = '48'; *FIPS Code for state;
+%LET FYear = 2010; *First year in panel;
+%LET LYear = 2010; *Last year in panel;
+%LET TYears = 1;
+
+%LET Year = 2010;
+
+* Set Macro Variables for Level of Geography;
+%LET GEOLevel = censustract;
+
+* Set Macro Varialbes for job type of interest;
+%LET JobType = JT01; * Primary Jobs in LODES;
+
+/*
+This Program Requires The Following Programs to run first:
+     SF_20105yr_CensusTractWorkersPoverty.sas
+
+/*-------------------------------------------------------------------*/
+/* Drop Observations                                                 */
+/*-------------------------------------------------------------------*/
+* Drop observations that have blank LODES data;
+Data work.Cntrds&state.&geolevel.&year._Drop1 Replace;
+	Set LODES7.HW_Centroids&state.&geolevel.&year;
+	If sum_S000 NE .;
+	* Add county fips;
+	h_county = substr(h_censustractfp,1,5);
+	w_county = substr(w_censustractfp,1,5);
+Run;
+
+/*-------------------------------------------------------------------*/
+/* Add Distance                                                      */
+/*-------------------------------------------------------------------*/
+
+* Add distance between census tracts in miles;
+Data work.Dist&state.&geolevel.&year._Drop Replace;
+	Set work.Cntrds&state.&geolevel.&year._Drop2;
+	/* Geodist works well, use options:
+		D since values in degrees
+		M to return distance in miles */	
+	Dist = Geodist(h_lat,h_lon,w_lat,w_lon,'DM');
+Run;
+
+/*-------------------------------------------------------------------*/
+/* Merge Data with ACS 2010 5 Year Poverty Data                      */
+/*-------------------------------------------------------------------*/
+
+* Add Home Census Tract Centroid;
+Proc Sort Data = acsout2.NPR_&ACS_Folder.SF&seq&geo;
+	by FIPS_CensusTract;
+Run;
+
+Proc Sort Data = work.Dist&state.&geolevel.&year._Drop;
+	by h_censustractfp;
+Run;
+
+Data LODES7.Poverty&state.&geolevel.&year;
+	merge
+		acsout2.NPR_&ACS_Folder.SF&seq&geo (rename=(FIPS_CensusTract=h_censustractfp))
+		work.Dist&state.&geolevel.&year._Drop;
+	By h_censustractfp;
+Run;
+
+/*-------------------------------------------------------------------*/
+/* Making lines with  county p50 values                              */
+/*-------------------------------------------------------------------*/
+/* The LODES Data is coarsened the least for distances that are less 
+than the CTPP Median distance.
+*/
+
+Data work.Polygon&state.&geolevel.&year Replace;
+	Set LODES7.Poverty&state.&geolevel.&year;
+	/* If sum_S000 GT 1; /* More than 1 job in the pair */
+	If h_statefp = &Statefp;
+Run;
+
+
+%MACRO CalculateP50Dist(StatVar);
+	Proc MEANS Data = work.Polygon&state.&geolevel.&year noprint
+		MEAN MEDIAN P25 P75;
+		Freq &StatVar;
+		/* Tried Freq values are the same obs counts are different */
+		Class h_county;
+		Var dist;
+		Output OUT = work.&StatVar._stats
+			Median = DstP50_&StatVar.;
+	Run;
+
+	Data work.&StatVar._stats Replace;
+		set work.&StatVar._stats;
+		Total&StatVar = _FREQ_;
+		Drop _FREQ_;
+		If _TYPE_ NE 0;
+		Drop _TYPE_;
+
+	run;
+%mend CalculateP50Dist;
+
+%CalculateP50Dist(sum_S000);
+%CalculateP50Dist(sum_SE01);
+%CalculateP50Dist(sum_SE03);
+
+Data work.AllP50_stats;
+	merge
+		work.sum_S000_stats
+		work.sum_SE01_stats
+		work.sum_SE03_stats;
+	By h_county;
+Run;
+
+/*-------------------------------------------------------------------*/
+/* Add WKT LineString that QGIS Will read to draw lines              */
+/*-------------------------------------------------------------------*/
+
+Data work.P50Lines&state.&geolevel.&year Replace;
+	Set &library..Poverty&state.&geolevel.&year;
+	If sum_S000 GT 0; /* More than 1 job in the pair */
+	If h_statefp = &Statefp; /* only workers that live in Texas */
+	* add string that QGIS can use to draw a line;
+	GISDATA = "LINESTRING(" || h_lon || " " || h_lat || ", " 
+							|| w_lon || " " || w_lat || ")";
+Run;
+
+Proc Sort Data = work.P50Lines&state.&geolevel.&year;
+	by h_county;
+Run;
+
+Data work.P50Lines&state.&geolevel.&year Replace;
+	merge
+		work.P50Lines&state.&geolevel.&year
+		work.AllP50_stats;
+	By h_county;
+Run;
+
+/*-------------------------------------------------------------------*/
+/* Create Table that keeps pairs with distance less than median      */
+/*-------------------------------------------------------------------*/
+
+%MACRO OutputP50Dist(StatVar);
+%LET LowPoverty = 0.05;
+%LET HighPoverty = 0.20;
+
+Data work.P50&StatVar.&state.&geolevel.&year Replace;
+	set work.P50Lines&state.&geolevel.&year;
+	* Keep observations where the median distance is less than the P50;
+	if &StatVar GT 0;
+	if dist LE DstP50_&StatVar;
+Run;
+
+/* Sort by number of jobs so that lines with more jobs
+will be drawn last */
+Proc Sort Data = work.P50&StatVar.&state.&geolevel.&year;
+	by &StatVar.;
+Run;
+
+Data work.P50&StatVar.&state.&geolevel.&year Replace;
+	Set work.P50&StatVar.&state.&geolevel.&year;
+	If prprtn_pvrty_ub LE &LowPoverty AND B17001e2 NE 0 Then PvrtyClass = 1;
+	If prprtn_pvrty_lb GE &HighPoverty Then PvrtyClass = 2;
+Run;
+
+/* To get correct job counts need to use unfiltered dataset */
+Data work.ALL&state.&geolevel.&year Replace;
+	Set LODES7.Poverty&state.&geolevel.&year;
+	If h_statefp = &Statefp; /* only workers that live in Texas */
+	If prprtn_pvrty_ub LE &LowPoverty AND B17001e2 NE 0 Then PvrtyClass = 1;
+	If prprtn_pvrty_lb GE &HighPoverty Then PvrtyClass = 2;
+Run;
+
+Title 'Jobs with O-D Pair Distance Less than Median';
+Proc MEANS Data = work.P50&StatVar.&state.&geolevel.&year
+	SUM ;
+	Class PvrtyClass;
+	Var sum_S000 sum_SE01 sum_SE02 sum_SE03;
+Run;
+
+Title 'All Jobs';
+Proc MEANS Data = work.ALL&state.&geolevel.&year
+	SUM MEAN;
+	Class PvrtyClass;
+	Var sum_S000 sum_SE01 sum_SE02 sum_SE03 dist;
+Run;
+
+Data work.P50&StatVar.&state.&geolevel.&year Replace;
+	Set work.P50&StatVar.&state.&geolevel.&year;
+	If &StatVar = sum_SE03 then do;
+		/* For High income jobs keep low poverty tracts */
+		if PvrtyClass = 1;
+		end;
+	If &StatVar = sum_SE01 then do;
+		/* For Low income jobs keep high poverty tracts */
+		if PvrtyClass = 2;
+	end;
+Run;
+
+/*-------------------------------------------------------------------*/
+/* Prepare Statistics For Map                                        */
+/*-------------------------------------------------------------------*/
+%let rootdir= &dd_data.Dissertation/LODESSummary/;
+ODS RTF File = "&rootdir&Output&StatVar.&state.&geolevel.&year..rtf"
+	Style = Journal;
+Title 'Descripitve Statistics for &StatVar &state &geolevel &year';
+
+Proc MEANS Data = work.P50&StatVar.&state.&geolevel.&year
+	N Min Max Mean Median STDDEV;
+	Class PvrtyClass;
+	Var DstP50_sum_SE01 DstP50_sum_SE03;
+Run;
+
+Title 'Sum &StatVar &state &geolevel &year';
+
+Proc MEANS Data = work.P50&StatVar.&state.&geolevel.&year
+	SUM ;
+	Class PvrtyClass;
+	Var sum_S000 sum_SE01 sum_SE02 sum_SE03;
+Run;
+
+
+Proc SQL;
+	Title 'Total Population and Total Poverty &state countystats';
+	select 	count(h_censustractfp),
+			sum(B17001e1) format = comma18. as TotalPop, 
+			sum(B17001e2) format = comma18. as TotalPoverty,
+			mean(prprtn_pvrty_e) format = comma6.2 as MeanPov
+		from ( 
+			Select Distinct h_censustractfp, 
+				h_censustractfp,
+				B17001e1,
+				B17001e2,
+				prprtn_pvrty_e,
+				h_statefp
+			From work.P50&StatVar.&state.&geolevel.&year)
+		Group by h_statefp;
+Quit;
+
+Proc SQL;
+	Title 'Total Population and Total Poverty &state';
+	select 	count(FIPS_CensusTract),
+			sum(B17001e1) format = comma18. as TotalPop, 
+			sum(B17001e2) format = comma18. as TotalPoverty,
+			mean(prprtn_pvrty_e) format = comma6.2 as MeanPov
+		from ( 
+			Select Distinct FIPS_CensusTract, 
+				FIPS_CensusTract,
+				B17001e1,
+				B17001e2,
+				prprtn_pvrty_e
+			From acsout2.Npr_acs2010_5yrsf0044tx);
+Quit;
+
+ODS TEXT='^S={LEFTMARGIN=1in RIGHTMARGIN=1in} 
+High Poverty &geolevel >= &HighPoverty
+Low Poverty &geolevel >= &LowPoverty';
+ODS RTF CLOSE; 
+/*-------------------------------------------------------------------*/
+/* Export Table to be used in GIS - With WKT Option                  */
+/*-------------------------------------------------------------------*/
+
+proc export data= work.P50&StatVar.&state.&geolevel.&year
+    outfile= "&dd_data.TEST\P50&StatVar.&state.&geolevel.&year..csv"
+	Replace;
+run;
+
+%MEND OutputP50Dist;
+%OutputP50Dist(sum_SE03);
+
+
