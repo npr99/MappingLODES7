@@ -1,4 +1,7 @@
 /*-------------------------------------------------------------------*/
+/* Program runs in SAS 9.3 (32) (English)                            */
+/*-------------------------------------------------------------------*/
+/*-------------------------------------------------------------------*/
 /* Program accesses the Summary Files for one table for all          */
 /* geographies from the 2012 5yr ACS summary file.                   */
 /*          Modified by Nathanael Proctor Rosenheim                  */
