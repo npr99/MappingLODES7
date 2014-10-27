@@ -20,14 +20,9 @@ The programs are based on the file structure created by running the LODES 7 Bulk
 
 -- Program Order --
 
-1. ImportLodes7
-
-1.1 ImportLodes7 requires ReadandSumLODES
-
-2. AddCentroidsLodes7
-
-3. SF_All_Macro_NPR_20105yr
-
-4. SF_20105yr_CensusTractPoverty
-
-5. MappingLODESwithPoverty
+1. ReadandSumLODES
+- ImportLodes7
+- AddCentroidsLodes7
+- SF_All_Macro_NPR_20105yr
+- SF_20105yr_CensusTractPoverty
+- MappingLODESwithPoverty
