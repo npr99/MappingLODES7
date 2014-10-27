@@ -47,12 +47,18 @@ options nosymbolgen;
 /*-------------------------------------------------------------------*/
 /* Important Folder Locations                                        */
 /*-------------------------------------------------------------------*/
+/* Where is the data stored? */
+%LET dd_data = C:\...\MyData\;
 
-%LET dd_data = C:\Users\Nathanael\Dropbox\MyData\;
-%LET dd_SASLib = C:\Users\Nathanael\MySASLib\;
-%LET Include_prog = C:\Users\Nathanael\Dropbox\MyPrograms\;
+/* Where do you want the output files to be saved? */
+%LET dd_SASLib = C:\...\MySASLib\;
+
+/* Where have you saved the included programs? */
+%LET Include_prog = C:\...\MyPrograms\;
+
 * Location where shape files with centroids is located;
-%LET shp_data = C:\Users\Nathanael\Dropbox\qgis\shapefiles\Tract_2010Census_DP1\;
+%LET shp_data = C:\...\qgis\shapefiles\Tract_2010Census_DP1\;
+
 /*-------------------------------------------------------------------*/
 /* Important Macro Variables                                         */
 /*-------------------------------------------------------------------*/
@@ -252,8 +258,13 @@ proc export data= work.&state.&cnty.&geolevel.&year._&FarthestDistance.Miles
 	Replace;
 run;
 
+/*-------------------------------------------------------------------*/
+/* STOP STOP STOP - Under Construction                               */
+/*-------------------------------------------------------------------*/
 
-
+/*
+The section below is not functional, future version of program
+will work for all years in database
 
 /*-------------------------------------------------------------------*/
 /* Macro to create datasets for all panel years                      */
