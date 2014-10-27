@@ -21,7 +21,8 @@ The programs are based on the file structure created by running the LODES 7 Bulk
 -- Program Order --
 
 1. ImportLodes7
-- Includes ReadandSumLODES
+
+1.1 ImportLodes7 requires ReadandSumLODES
 
 2. AddCentroidsLodes7
 
