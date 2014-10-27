@@ -18,3 +18,10 @@ U.S. Census Bureau. 2013. LODES Data. Longitudinal-Employer Household Dynamics P
 
 The programs are based on the file structure created by running the LODES 7 Bulkdownload.
 
+-- Program Order
+1. ImportLodes7
+- Includes ReadandSumLODES
+2. AddCentroidsLodes7
+3. SF_All_Macro_NPR_20105yr
+4. SF_20105yr_CensusTractPoverty
+5. MappingLODESwithPoverty
