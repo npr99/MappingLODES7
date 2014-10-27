@@ -1,0 +1,507 @@
+ /*-------------------------------------------------------------------*/
+ /* Program imports LODES7 data and converts from BlockID to GeoLevel */
+ /* After importing the program combines LODES7 data into a Panel     */
+ /*          by Nathanael Proctor Rosenheim                           */
+ /*-------------------------------------------------------------------*/
+ /*                                                                   */
+ /* This material is provided "as is" by the author.                  */
+ /* There are no warranties, expressed or implied, as to              */
+ /* merchantability or fitness for a particular purpose regarding     */
+ /* the materials or code contained herein. The author is not         */
+ /* responsible for errors in this material as it now exists or       */
+ /* will exist, nor does the author provide technical support for it. */
+ /*                                                                   */
+ /*-------------------------------------------------------------------*/
+ /* Date Last Updated: 24 Sept 2014                                   */
+ /*-------------------------------------------------------------------*/
+ /* Questions or problem reports concerning this material may be      */
+ /* addressed to the author on github: https://github.com/npr99       */
+ /*                                                                   */
+ /*-------------------------------------------------------------------*/
+ /* Data Source:                                                      */
+ /* United States Census Bureau (2013) LEHD Origin-Destination        */ 
+ /*       Employment Statistics (LODES)Dataset Structure Format       */
+ /*       Version 7.0 Retrieved 5/22/2013 from                        */
+ /*       http://lehd.ces.census.gov/data/                            */
+ /*-------------------------------------------------------------------*/
+/*-------------------------------------------------------------------*/
+/* Clear Log                                                         */
+/*-------------------------------------------------------------------*/
+DM "clear log";
+
+/*-------------------------------------------------------------------*/
+/* Control Symbolgen                                                 */
+/*-------------------------------------------------------------------*/
+
+* Turn on SYBMBOLGEN option to see how macro variables are resolved in log;
+* global system option MPRINT to view the macro code with the 
+macro variables resolved;
+* options SYMBOLGEN MPRINT;
+
+* SYMBOLGEN option can be turned off with the following command;
+options nosymbolgen;
+
+/*-------------------------------------------------------------------*/
+/* Important Folder Locations                                        */
+/*-------------------------------------------------------------------*/
+/* Where is the data stored? */
+%LET dd_data = C:\...\MyData\;
+
+/* Where do you want the output files to be saved? */
+%LET dd_SASLib = C:\...\MySASLib\;
+
+/* Where have you saved the included programs? */
+%LET Include_prog = C:\...\MyPrograms\;
+
+/*-------------------------------------------------------------------*/
+/* Important Macro Variables                                         */
+/*-------------------------------------------------------------------*/
+
+* Set Macro Variables for State and Years;
+%LET State = TX;
+%LET Statefp = '48'; *FIPS Code for state;
+%LET FYear = 2002; *First year in panel;
+%LET LYear = 2011; *Last year in panel;
+%LET TYears = 10;
+
+* Set Macro Variables for Level of Geography;
+%LET GEOLevel = censustract;
+
+* Set Macro Varialbes for job type of interest;
+%LET JobType = JT01; * Primary Jobs in LODES;
+
+
+%MACRO ImportLODES7(
+   State = ,
+   StateFP =,
+   Year =,
+   JobType =,
+   GEOLevel =);
+
+/*-------------------------------------------------------------------*/
+/* Define SAS Library                                                */
+/*-------------------------------------------------------------------*/
+%let library = LODES7;
+LIBNAME &library "&dd_SASLib.&library";
+
+* Read in file that has macros for importing and summing LODES;
+%INCLUDE "&Include_prog.LODES_SAS\ReadandSumLODES.sas";
+
+* Found these text utilities that might be useful from 
+	http://www2.sas.com/proceedings/sugi30/029-30.pdf
+	include add_string macro;
+%INCLUDE "&Include_prog.Macros_SAS\TextUtilityMacros.sas";
+* Found these Tight Looping with Macro Arrays from
+	http://www.sascommunity.org/wiki/Tight_Looping_with_Macro_Arrays
+	inlcude Array, Do_Over Macros;
+%INCLUDE "&Include_prog.Macros_SAS\Clay-TightLooping-macros\NUMLIST.sas";
+%INCLUDE "&Include_prog.Macros_SAS\Clay-TightLooping-macros\ARRAY.sas";
+%INCLUDE "&Include_prog.Macros_SAS\Clay-TightLooping-macros\DO_OVER.sas";
+
+/*-------------------------------------------------------------------*/
+/* Codes for Key Variables in LODES OD Files                         */
+/*-------------------------------------------------------------------*/
+
+	/* GEOLevel: Level of Geography;
+	* State, County, CensusTract, BlockGroup */
+	/* Job Type
+	JT00 = All Jobs
+	JT01 = Primary Jobs
+	JT02 = All Private Jobs
+	JT03 = Private Primary Jobs
+	JT04 = All Federal Jobs (not all years)
+	JT05 = Federal Primary Jobs (not all years)*/
+	/* ODType;
+    Aux = jobs with the workplace in the state and 
+	the residence outside of the state;
+	Main = jobs with both workplace and residence in the state */
+
+/*-------------------------------------------------------------------*/
+/* Stack LODES OD Files with OD Main and AUX                         */
+/*-------------------------------------------------------------------*/
+
+/* Comment:
+Because LODES breaks files into two sets the two sets need to be stacked.
+This would create a huge file so before the files are stacked the 
+LODES data is aggregated to reduce the number of OD pairs
+*/
+
+* Call Macros to import MAIN files for the same year;
+* Outputs work.Sort&geolevel&ODType;
+%ImportLODES(
+	State = &state,
+	Year = &year,
+	GEOLevel = &GEOLevel,
+	JobType =  &JobType,
+	ODType = Main);
+
+* Call Macros to AggregateLODES MAIN files for the same year;
+* Outputs work.SUM&state.&geolevel.&ODType;
+%AggregateLODES(
+	State = &state,
+	Year = &year,
+	GEOLevel = &GEOLevel,
+	JobType =  &JobType,
+	ODType = Main);
+
+/*-------------------------------------------------------------------*/
+/* Read in, SUM and STACK neighboring AUX State Files                */
+/*-------------------------------------------------------------------*/
+/*
+Comment - June 9 2014
+NOTE: AUX file has Workplaces within State and residences out of state
+In order to see the number of workers that commute to a neighboring state
+the AUX files for a set of states needs to be read in, then keep only the 
+States with the home GEOIDS of interest
+*/
+
+* Macro to read in an array of states;
+%MACRO ImportArrayLODES(allstates);
+	%ImportLODES(
+		State = &allstates,
+		Year = &year,
+		GEOLevel = &GEOLevel,
+		JobType =  &JobType,
+		ODType = Aux);
+   * Call Macros to AggregateLODES MAIN and AUX files for the same year;
+   * Outputs work.SUM&state.&geolevel.&ODType;
+	%AggregateLODES(
+		State = &allstates,
+		Year = &year,
+		GEOLevel = &GEOLevel,
+		JobType =  &JobType,
+		ODType = AUX);
+   * Stack AUX States;
+   * Stacks each new AUX State after aggregation;
+	PROC APPEND BASE = work.TotalStack&geolevel.&year 
+		DATA = work.SUM&allstates.&GEOLevel.AUX;
+	RUN;
+%MEND ImportArrayLODES;
+* Initialize the data that will have tha stack of state MAIN, AUX, and 
+All AUX States;
+DATA work.TotalStack&geolevel.&year REPLACE;
+    Set work.SUM&state.&geolevel.MAIN;
+RUN;
+*LODES files are for each State from 2002 to 2011;
+%Let AUXStates = AL AK AZ AR CA CO CT DE FL GA HI ID IL IN IA KS KY LA 
+ME MD MA MI MN MS MO MT NE NV NH NJ NM NY NC ND OH OK OR PA RI SC SD 
+TN TX UT VT VA WA WV WI WY;
+%ARRAY(AllSTATES, VALUES=&AUXStates);
+%Do_Over(Allstates, MACRO=ImportArrayLODES);
+
+* Keep OD pairs that have workplace or origin in main state;
+DATA work.TotalStack&state.&geolevel.&year REPLACE;
+	Set work.TotalStack&geolevel.&year;
+	* Look for observations with same home and work GEOIDS;
+	If h_statefp = &Statefp OR w_statefp = &Statefp;
+	year = &year;
+Run;
+/*-------------------------------------------------------------------*/
+/* Aggregate OnTheMap Statistics by GeoLevel                         */
+/*-------------------------------------------------------------------*/
+/*
+Need to produce the following statistics for each of the 3 job categories
+Earnings, Age, Industry.
+Each county and each year needs to have one observation.
+Employed in the Selection Area
+Employed in the Selection Area but Living Outside
+Employed and Living in the Selection Area
+Living in the Selection Area
+Living in the Selection Area but Employed Outside
+Living and Employed in the Selection Area
+*/
+* Calculate totals for Employed in Selection Area;
+PROC SORT DATA = work.TotalStack&state.&geolevel.&year;
+	By w_&geolevel.fp h_&geolevel.fp; 
+RUN;
+%LET HorW = w;
+DATA work.EmployedIn&state.&geolevel.&year REPLACE;
+	Set work.TotalStack&state.&geolevel.&year;
+	BY &HorW._&geolevel.fp;
+	IF first.&HorW._&geolevel.fp THEN DO;
+		&HorW.total_S000 = 0; 
+		&HorW.total_SA01 = 0; 
+		&HorW.total_SA02 = 0; 
+		&HorW.total_SA03 = 0; 
+		&HorW.total_SE01 = 0; 
+		&HorW.total_SE02 = 0; 
+		&HorW.total_SE03 = 0; 
+		&HorW.total_SI01 = 0; 
+		&HorW.total_SI02 = 0; 
+		&HorW.total_SI03 = 0;
+		&HorW.totalcnt = 0;
+		END;
+	&HorW.total_S000 + sum_S000; 
+	&HorW.total_SA01 + sum_SA01; 
+	&HorW.total_SA02 + sum_SA02; 
+	&HorW.total_SA03 + sum_SA03; 
+	&HorW.total_SE01 + sum_SE01; 
+	&HorW.total_SE02 + sum_SE02; 
+	&HorW.total_SE03 + sum_SE03; 
+	&HorW.total_SI01 + sum_SI01; 
+	&HorW.total_SI02 + sum_SI02; 
+	&HorW.total_SI03 + sum_SI03;
+	&HorW.totalcnt + 1;
+	IF last.&HorW._&geolevel.fp THEN OUTPUT;
+RUN;
+* Drop variables that are nolonger needed;
+DATA work.EmployedIn&state.&geolevel.&year REPLACE;
+	Set work.EmployedIn&state.&geolevel.&year;
+	FIPS_&geolevel = w_&geolevel.fp;
+	If w_statefp = &statefp;
+	* Keep geoid, total, and income groups = SE;
+	KEEP
+		FIPS_&geolevel
+		year
+		wtotal:;
+Run;
+
+Data work.EmployedIn&state.&geolevel.&year;
+	Retain FIPS_&geolevel year;
+	Set work.EmployedIn&state.&geolevel.&year;
+run;
+
+Proc Sort Data = work.EmployedIn&state.&geolevel.&year;
+	by FIPS_&geolevel;
+Run;
+
+* Calculate totals for Living in Selection Area;
+PROC SORT DATA = work.TotalStack&state.&geolevel.&year;
+	By h_&geolevel.fp w_&geolevel.fp; 
+RUN;
+%LET HorW = h;
+DATA work.LivingIn&state.&geolevel.&year REPLACE;
+	Set work.TotalStack&state.&geolevel.&year;
+	BY &HorW._&geolevel.fp;
+	IF first.&HorW._&geolevel.fp THEN DO;
+		&HorW.total_S000 = 0; 
+		&HorW.total_SA01 = 0; 
+		&HorW.total_SA02 = 0; 
+		&HorW.total_SA03 = 0; 
+		&HorW.total_SE01 = 0; 
+		&HorW.total_SE02 = 0; 
+		&HorW.total_SE03 = 0; 
+		&HorW.total_SI01 = 0; 
+		&HorW.total_SI02 = 0; 
+		&HorW.total_SI03 = 0;
+		&HorW.totalcnt = 0;
+		END;
+	&HorW.total_S000 + sum_S000; 
+	&HorW.total_SA01 + sum_SA01; 
+	&HorW.total_SA02 + sum_SA02; 
+	&HorW.total_SA03 + sum_SA03; 
+	&HorW.total_SE01 + sum_SE01; 
+	&HorW.total_SE02 + sum_SE02; 
+	&HorW.total_SE03 + sum_SE03; 
+	&HorW.total_SI01 + sum_SI01; 
+	&HorW.total_SI02 + sum_SI02; 
+	&HorW.total_SI03 + sum_SI03;
+	&HorW.totalcnt + 1;
+	IF last.&HorW._&geolevel.fp THEN OUTPUT;
+RUN;
+* Drop variables that are nolonger needed;
+DATA work.LivingIn&state.&geolevel.&year REPLACE;
+	Set work.LivingIn&state.&geolevel.&year;
+	FIPS_&geolevel = h_&geolevel.fp;
+	If h_statefp = &statefp;
+	* Keep geoid, total, and income groups = SE;
+	KEEP
+		FIPS_&geolevel
+		year
+		htotal:;
+Run;
+
+Data work.LivingIn&state.&geolevel.&year;
+	Retain FIPS_&geolevel year;
+	Set work.LivingIn&state.&geolevel.&year;
+run;
+
+Proc Sort Data = work.LivingIn&state.&geolevel.&year;
+	by FIPS_&geolevel;
+Run;
+
+/*-------------------------------------------------------------------*/
+/* Merge Primary Data Sets for On The Map Numbers                    */
+/*-------------------------------------------------------------------*/
+DATA work.Emplyd_LvngN&state.&geolevel.&year REPLACE;
+	Set work.TotalStack&state.&geolevel.&year;
+	FIPS_&geolevel = h_&geolevel.fp;
+	If h_&geolevel.fp = w_&geolevel.fp;
+	If w_statefp = &statefp;
+	* Keep geoid, total, and income groups = SE;
+	KEEP
+		FIPS_&geolevel
+		year
+		sum_:;
+Run;
+
+Data work.Emplyd_LvngN&state.&geolevel.&year;
+	Retain FIPS_&geolevel year;
+	Set work.Emplyd_LvngN&state.&geolevel.&year;
+run;
+
+Proc Sort Data = work.Emplyd_LvngN&state.&geolevel.&year;
+	by FIPS_&geolevel;
+Run;
+
+Data work.OnTheMap&state.&geolevel.&year;
+	merge
+		work.LivingIn&state.&geolevel.&year
+		work.EmployedIn&state.&geolevel.&year
+		work.Emplyd_LvngN&state.&geolevel.&year;
+	By FIPS_&geolevel;
+Run;
+
+%MEND ImportLODES7;
+
+/*-------------------------------------------------------------------*/
+/* Macro to create datasets for all panel years                      */
+/*-------------------------------------------------------------------*/
+
+%MACRO LODES7Panel(
+   State = ,
+   StateFP = ,
+   JobType = ,
+   geolevel = , 
+   Fyear = ,
+   TYears =);
+
+%Do i = 1 %to &TYears;
+	Data _NULL_;
+		CALL SYMPUT("panelyear",put(&Fyear+&i-1,4.));
+	RUN;
+	%ImportLODES7(
+		State = &state,
+		StateFP = &StateFP,
+		Year = &panelyear,
+		JobType = &JobType,
+ 		GEOLevel = &GEOLevel);
+
+	PROC APPEND BASE = work.OnTheMap&state.&geolevel.&fyear._&lyear 
+		DATA = work.OnTheMap&state.&geolevel.&panelyear;
+	RUN;
+	%end;
+
+
+%MEND LODES7Panel;
+* Delete the existing panel dataset before running IMPORT Macro;
+PROC datasets library=work NOLIST;
+	DELETE OnTheMap&state.&geolevel.&fyear._&lyear;
+Run;
+
+
+/*-------------------------------------------------------------------*/
+/* Run Macro                                                        */
+/*-------------------------------------------------------------------*/
+
+%LODES7Panel(
+   State = &State,
+   StateFP = &StateFp,
+   JobType = &JobType,
+   geolevel = &GEOlevel,
+   Fyear = &Fyear,
+   TYears = &Tyears);
+
+Proc Sort Data = work.OnTheMap&state.&geolevel.&fyear._&lyear;
+	by FIPS_&geolevel year;
+Run;
+
+/*-------------------------------------------------------------------*/
+/* Order and Label Variables                                         */
+/*-------------------------------------------------------------------*/
+
+%MACRO labelvariables( );
+%IF &JobType = JT00 %THEN %LET JobLabel = " (All Jobs)";
+%IF &JobType = JT01 %THEN %LET JobLabel = " (Primary Jobs)";
+%IF &JobType = JT02 %THEN %LET JobLabel = " (All Private Jobs)";
+%IF &JobType = JT03 %THEN %LET JobLabel = " (Private Primary Jobs)";
+%IF &JobType = JT04 %THEN %LET JobLabel = " (All Federal Jobs)";
+%IF &JobType = JT05 %THEN %LET JobLabel = " (Federal Primary Jobs)";
+
+Data Lodes7.OnTheMap&state.&geolevel.&fyear._&lyear;
+	Retain FIPS_&geolevel year
+	wtotal_S000 htotal_S000 sum_S000
+	wtotal_SE01 htotal_SE01 sum_SE01
+	wtotal_SE02 htotal_SE02 sum_SE02
+	wtotal_SE03 htotal_SE03 sum_SE03;
+	Set work.OnTheMap&state.&geolevel.&fyear._&lyear;
+	Label
+		wtotal_S000 = "Employed in the &geolevel &JobLabel All Workers"
+		htotal_S000 = "Living in the &geolevel &JobLabel  All Workers"
+		sum_S000	= "Living & Employed in the &geolevel &JobLabel  All Workers"
+		wtotal_SE01 = "Employed in the &geolevel &JobLabel Workers Earning $1,250 per month or less"
+		htotal_SE01 = "Living in the &geolevel &JobLabel Workers Earning $1,250 per month or less"
+		sum_SE01	= "Living & Employed in the &geolevel &JobLabel Workers Earning $1,250 per month or less"
+		wtotal_SE02 = "Employed in the &geolevel &JobLabel Workers Earning $1,251 to $3,333 per month"
+		htotal_SE02 = "Living in the &geolevel &JobLabel Workers Earning $1,251 to $3,333 per month"
+		sum_SE02	= "Living & Employed in the &geolevel &JobLabel Workers Earning $1,251 to $3,333 per month"
+		wtotal_SE03 = "Employed in the &geolevel &JobLabel Workers Earning More than $3,333 per month"
+		htotal_SE03 = "Living in the &geolevel &JobLabel Workers Earning More than $3,333 per month"
+		sum_SE03	= "Living & Employed in the &geolevel &JobLabel Workers Earning More than $3,333 per month";
+Run;
+
+%MEND labelvariables;
+
+%labelvariables( );
+
+/*-------------------------------------------------------------------*/
+/* State FIPS Codes                                                  */
+/*-------------------------------------------------------------------*/
+/*
+State Abbreviation	FIPS Code	State Name
+AK	02	ALASKA
+AL	01	ALABAMA
+AR	05	ARKANSAS
+AS	60	AMERICAN SAMOA
+AZ	04	ARIZONA
+CA	06	CALIFORNIA
+CO	08	COLORADO
+CT	09	CONNECTICUT
+DC	11	DISTRICT OF COLUMBIA
+DE	10	DELAWARE
+FL	12	FLORIDA
+GA	13	GEORGIA
+GU	66	GUAM
+HI	15	HAWAII
+IA	19	IOWA
+ID	16	IDAHO
+IL	17	ILLINOIS
+IN	18	INDIANA
+KS	20	KANSAS
+KY	21	KENTUCKY
+LA	22	LOUISIANA
+MA	25	MASSACHUSETTS
+MD	24	MARYLAND
+ME	23	MAINE
+MI	26	MICHIGAN
+MN	27	MINNESOTA
+MO	29	MISSOURI
+MS	28	MISSISSIPPI
+MT	30	MONTANA
+NC	37	NORTH CAROLINA
+ND	38	NORTH DAKOTA
+NE	31	NEBRASKA
+NH	33	NEW HAMPSHIRE
+NJ	34	NEW JERSEY
+NM	35	NEW MEXICO
+NV	32	NEVADA
+NY	36	NEW YORK
+OH	39	OHIO
+OK	40	OKLAHOMA
+OR	41	OREGON
+PA	42	PENNSYLVANIA
+PR	72	PUERTO RICO
+RI	44	RHODE ISLAND
+SC	45	SOUTH CAROLINA
+SD	46	SOUTH DAKOTA
+TN	47	TENNESSEE
+TX	48	TEXAS
+UT	49	UTAH
+VA	51	VIRGINIA
+VI	78	VIRGIN ISLANDS
+VT	50	VERMONT
+WA	53	WASHINGTON
+WI	55	WISCONSIN
+WV	54	WEST VIRGINIA
+WY	56	WYOMING
+*/
