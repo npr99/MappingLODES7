@@ -14,7 +14,6 @@ The entire LODES 7 Database can be downloaded using the  LEHD_LODES7_bulkDownloa
 
 Individual files can be downloaded from
 http://lehd.ces.census.gov/data/#lodes
-U.S. Census Bureau. 2013. LODES Data. Longitudinal-Employer Household Dynamics Program. http://lehd.ces.census.gov/applications/help/onthemap.html
 
 The programs are based on the file structure created by running the LODES 7 Bulkdownload.
 
@@ -26,3 +25,13 @@ The programs are based on the file structure created by running the LODES 7 Bulk
 - SF_All_Macro_NPR_20105yr
 - SF_20105yr_CensusTractPoverty
 - MappingLODESwithPoverty
+
+-- Mapping Files --
+All maps can be created using QGIS "Free and Open Source Geographic Information System"
+http://www.qgis.org/en/site/
+
+-- References --
+
+U.S. Census Bureau. 2013. LODES Data. Longitudinal-Employer Household Dynamics Program. http://lehd.ces.census.gov/applications/help/onthemap.html
+
+Quantum GIS Development Team (2014). Quantum GIS Geographic Information System. Open Source Geospatial Foundation Project. http://qgis.osgeo.org
