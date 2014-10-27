@@ -3,9 +3,9 @@ MappingLODES7
 
 Code written for SAS to import, aggregate, and process the LODES 7 Database.
 
-Still under construction.
+WARNING - All files are still under construction.
 
-I have included the draft code for SAS.
+-- Get the raw data --
 
 The entire LODES 7 Database can be downloaded using the  LEHD_LODES7_bulkDownload at https://github.com/npr99/LEHD_LODES7_bulkDownload
 
