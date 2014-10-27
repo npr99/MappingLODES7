@@ -27,6 +27,7 @@ The programs are based on the file structure created by running the LODES 7 Bulk
 - MappingLODESwithPoverty
 
 -- Mapping Files --
+
 All maps can be created using QGIS "Free and Open Source Geographic Information System"
 http://www.qgis.org/en/site/
 
