@@ -1,29 +1,32 @@
- /*-------------------------------------------------------------------*/
- /* Program imports LODES7 data and converts from BlockID to GeoLevel */
- /* After importing the program combines LODES7 data into a Panel     */
- /*          by Nathanael Proctor Rosenheim                           */
- /*-------------------------------------------------------------------*/
- /*                                                                   */
- /* This material is provided "as is" by the author.                  */
- /* There are no warranties, expressed or implied, as to              */
- /* merchantability or fitness for a particular purpose regarding     */
- /* the materials or code contained herein. The author is not         */
- /* responsible for errors in this material as it now exists or       */
- /* will exist, nor does the author provide technical support for it. */
- /*                                                                   */
- /*-------------------------------------------------------------------*/
- /* Date Last Updated: 24 Sept 2014                                   */
- /*-------------------------------------------------------------------*/
- /* Questions or problem reports concerning this material may be      */
- /* addressed to the author on github: https://github.com/npr99       */
- /*                                                                   */
- /*-------------------------------------------------------------------*/
- /* Data Source:                                                      */
- /* United States Census Bureau (2013) LEHD Origin-Destination        */ 
- /*       Employment Statistics (LODES)Dataset Structure Format       */
- /*       Version 7.0 Retrieved 5/22/2013 from                        */
- /*       http://lehd.ces.census.gov/data/                            */
- /*-------------------------------------------------------------------*/
+/*-------------------------------------------------------------------*/
+/* Program runs in SAS 9.3 (32) (English)                            */
+/*-------------------------------------------------------------------*/
+/*-------------------------------------------------------------------*/
+/* Program imports LODES7 data and converts from BlockID to GeoLevel */
+/* After importing the program combines LODES7 data into a Panel     */
+/*          by Nathanael Proctor Rosenheim                           */
+/*-------------------------------------------------------------------*/
+/*                                                                   */
+/* This material is provided "as is" by the author.                  */
+/* There are no warranties, expressed or implied, as to              */
+/* merchantability or fitness for a particular purpose regarding     */
+/* the materials or code contained herein. The author is not         */
+/* responsible for errors in this material as it now exists or       */
+/* will exist, nor does the author provide technical support for it. */
+/*                                                                   */
+/*-------------------------------------------------------------------*/
+/* Date Last Updated: 24 Sept 2014                                   */
+/*-------------------------------------------------------------------*/
+/* Questions or problem reports concerning this material may be      */
+/* addressed to the author on github: https://github.com/npr99       */
+/*                                                                   */
+/*-------------------------------------------------------------------*/
+/* Data Source:                                                      */
+/* United States Census Bureau (2013) LEHD Origin-Destination        */ 
+/*       Employment Statistics (LODES)Dataset Structure Format       */
+/*       Version 7.0 Retrieved 5/22/2013 from                        */
+/*       http://lehd.ces.census.gov/data/                            */
+/*-------------------------------------------------------------------*/
 /*-------------------------------------------------------------------*/
 /* Clear Log                                                         */
 /*-------------------------------------------------------------------*/
